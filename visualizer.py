@@ -1,4 +1,5 @@
 from collections import defaultdict
+import time
 from typing import Dict, Generator, List, Set, Tuple
 from agent import Agent
 from graph import Graph, GridGraph
@@ -60,6 +61,11 @@ def run_astar(graph: Graph, agents: List[Agent]):
             a.optimal_path = [-1]
         else:
             a.optimal_path = path
+            
+def interpolate(a: float, b: float, t: float):
+    return a * (1-t) + b * t
+def vec_interpolate(a: Tuple[float,...], b: Tuple[float,...], t: float):
+    return tuple(interpolate(va,vb,t) for va,vb in zip(a,b))
 
 COOP_MODE = 1
 INDEP_MODE = 2
@@ -68,6 +74,10 @@ if __name__ == "__main__":
     parser = argparse.ArgumentParser()
     parser.add_argument("-f", "--file", default = "grid.txt", type=str, dest="file",
         help="use a specific file to initialize the grid")
+    parser.add_argument("-c", "--continuous", action="store_true", dest="continuous",
+        help="view movements in the grid with interpolation instead of discretized")
+    parser.add_argument("-S", "--speed", type=float, dest="speed", default=5,
+        help="sets the speed (in nodes per second) of continuous movement. Requires --continuous.")
     parser.add_argument("-r", "--reservations", action="store_true", dest="reservations",
         help="visualize reservation at any given time step as grey squares")
     parser.add_argument("-g", "--graph", action="store_true", dest="graph",
@@ -81,21 +91,34 @@ if __name__ == "__main__":
     filename = args.file
     SHOW_RESERVATIONS = args.reservations
     SHOW_GRAPH = args.graph
+    CONTINUOUS = args.continuous
+    SPEED = args.speed
     SHOW_PATHS = False
     
     graph, agents = read_grid(filename)
+    # Sort agents by name for iteration over it later
     agents = {a: agents[a] for a in sorted(agents.keys())}
     agent_colors: Dict[str, pygame.Color] = {}
     _colorlist = list(generate_colors(len(agents),s=80,v=80))
-    agent_offsets: Dict[str, float] = {a.name: 0.3 + i * 0.4 / (len(agents) - 1) for i,a in enumerate(agents.values())}
+    single_agent = len(agents) == 1
+    agent_offsets: Dict[str, float] = {a.name: 0.5 if single_agent else (0.3 + i * 0.4 / (len(agents) - 1)) for i,a in enumerate(agents.values())}
     for a, c in zip(agents.keys(), _colorlist):
         agent_colors[a] = c
     
     DISPLAY_WIDTH = args.display_width
     DISPLAY_HEIGHT = args.display_height
     
+    t0 = time.time()
     res = run_mapf(graph, list(agents.values()))
+    t1 = time.time()    
     run_astar(graph, list(agents.values()))
+    t2 = time.time()
+    
+    print()
+    print( "======================================")
+    print(f"Time cost - cooperative A*: {1000 * (t1 - t0):.1f}ms")
+    print(f"Time cost - regular A*:     {1000 * (t2 - t1):.1f}ms")
+    print( "======================================")
     
     move_mode = COOP_MODE
     for a, agent in agents.items():
@@ -105,6 +128,7 @@ if __name__ == "__main__":
     clock = pygame.time.Clock()
     running = True
     agent_time = 0
+    partial_time = 0
     
     TILE_SIZE = min(DISPLAY_WIDTH // graph.dim_x, DISPLAY_HEIGHT // graph.dim_y)
     screen = pygame.display.set_mode((TILE_SIZE * graph.dim_x, TILE_SIZE * graph.dim_y))
@@ -135,7 +159,9 @@ if __name__ == "__main__":
         
         for aname, agent in agents.items():
             color = agent_colors[aname]
-            x,y = graph.coords_from_id(agent.get_position(agent_time))
+            xnow, ynow = graph.coords_from_id(agent.get_position(agent_time))
+            xnext, ynext = graph.coords_from_id(agent.get_position(agent_time + 1))
+            x,y = vec_interpolate((xnow,ynow), (xnext,ynext),partial_time)
             pygame.draw.circle(screen, color, ((x + 0.5) * TILE_SIZE, (y + 0.5) * TILE_SIZE), 0.4 * TILE_SIZE)
             gx,gy = graph.coords_from_id(agent.goal)
             pygame.draw.line(screen,color,((gx+0.2) * TILE_SIZE, (gy+0.2) * TILE_SIZE), ((gx+0.8) * TILE_SIZE, (gy+0.8) * TILE_SIZE), 5)
@@ -163,13 +189,27 @@ if __name__ == "__main__":
             
         keys = pygame.key.get_pressed()
         lpress = bool(keys[pygame.K_a]) or bool(keys[pygame.K_LEFT])
-        if lpress and not pressed["left"]:
-            agent_time = max(agent_time - 1, 0)
-        pressed["left"] = lpress
         rpress = bool(keys[pygame.K_d]) or bool(keys[pygame.K_RIGHT])
-        if rpress and not pressed["right"]:
-            agent_time += 1
-        pressed["right"] = rpress
+        if not CONTINUOUS:
+            if lpress and not pressed["left"]:
+                agent_time = max(agent_time - 1, 0)
+            pressed["left"] = lpress
+            if rpress and not pressed["right"]:
+                agent_time += 1
+            pressed["right"] = rpress
+        else:
+            if lpress:
+                partial_time -= dt * SPEED
+            if rpress:
+                partial_time += dt * SPEED
+            
+            if partial_time < 0:
+                if agent_time == 0: partial_time = 0
+                else: partial_time += 1; agent_time -= 1
+            elif partial_time >= 1:
+                partial_time -= 1; agent_time += 1
+                
+            
         mpress = bool(keys[pygame.K_m])
         if mpress and not pressed["m"]:
             if move_mode == COOP_MODE:
