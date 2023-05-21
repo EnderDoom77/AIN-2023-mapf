@@ -37,6 +37,10 @@ def generate_colors(n: int, s: float = 100, v: float = 100, a: float = 100) -> G
         color = pygame.Color(0,0,0)
         color.hsva = (hdelta * i, s, v, a)
         yield color
+        
+def to_html_color(color: pygame.color.Color):
+    value = (color.r << 16) + (color.g << 8) + color.b
+    return f"#{value:x}"
 
 def run_mapf(graph: Graph, agents: List[Agent]) -> Dict[int, Set[int]]:
     start = [a.init_pos for a in agents]
@@ -66,8 +70,8 @@ if __name__ == "__main__":
         help="use a specific file to initialize the grid")
     parser.add_argument("-r", "--reservations", action="store_true", dest="reservations",
         help="visualize reservation at any given time step as grey squares")
-    parser.add_argument("-p", "--paths", action="store_true", dest="paths",
-        help="visualize the paths from the origin to the goal of every agent")
+    parser.add_argument("-g", "--graph", action="store_true", dest="graph",
+        help="open a pdf viewer of the graph that represents the desired grid")
     parser.add_argument("-W", "--width", type=int, default=1280, dest="display_width",
         help="sets the maximum display width")
     parser.add_argument("-H", "--height", type=int, default=720, dest="display_height",
@@ -76,13 +80,15 @@ if __name__ == "__main__":
     
     filename = args.file
     SHOW_RESERVATIONS = args.reservations
-    SHOW_PATHS = args.paths
+    SHOW_GRAPH = args.graph
+    SHOW_PATHS = False
     
     graph, agents = read_grid(filename)
+    agents = {a: agents[a] for a in sorted(agents.keys())}
     agent_colors: Dict[str, pygame.Color] = {}
     _colorlist = list(generate_colors(len(agents),s=80,v=80))
     agent_offsets: Dict[str, float] = {a.name: 0.3 + i * 0.4 / (len(agents) - 1) for i,a in enumerate(agents.values())}
-    for a, c in zip(sorted(agents.keys()), _colorlist):
+    for a, c in zip(agents.keys(), _colorlist):
         agent_colors[a] = c
     
     DISPLAY_WIDTH = args.display_width
@@ -103,12 +109,16 @@ if __name__ == "__main__":
     TILE_SIZE = min(DISPLAY_WIDTH // graph.dim_x, DISPLAY_HEIGHT // graph.dim_y)
     screen = pygame.display.set_mode((TILE_SIZE * graph.dim_x, TILE_SIZE * graph.dim_y))
     font = pygame.font.SysFont(None, int(TILE_SIZE * 0.6))
-    print(agents)
     
     # graph.visualize(show_distances=False)
     
     controls_render = font.render(f"[Left]/[A] : Back | [Right]/[D] : Forward | [0]: Start | [9]: End | [M] : Toggle Move Mode | [P] : Toggle Path Display", True, (255,255,255))
-    graph.visualize()
+    
+    if SHOW_GRAPH:
+        colors = ["black" for _ in range(graph.size)]
+        for i,a in enumerate(agents.values()):
+            colors[a.init_pos] = to_html_color(agent_colors[a.name])
+        graph.visualize("Grid Visualization",colors=colors,show_distances=False,show_isolated=False)
     pressed = defaultdict(bool)
     while running:
         # poll for events

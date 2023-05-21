@@ -66,7 +66,7 @@ class Graph:
     def distance_heuristic(self, origin: int, destination: int) -> float:
         return self.distance(origin, destination)
     
-    def visualize(self, comment="Graph", colors:List[str]=None, show_distances=True):
+    def visualize(self, comment="Graph", colors:List[str]=None, show_distances=True, show_isolated=True):
         print("Preprocessing...")
         dot = graphviz.Digraph(comment=comment)
         if not colors:
@@ -74,7 +74,8 @@ class Graph:
         
         print("Adding nodes to the graph render")
         for n in range(self.size):
-            dot.node(str(n), str(n+1), {"color":colors[n]})
+            if show_isolated or self.neighbours(n) != []:
+                dot.node(str(n), str(n+1), {"color":colors[n]})
         print("Adding edges to the graph render")
         for n in range(self.size):
             for adj,d in self.neighbours(n):
