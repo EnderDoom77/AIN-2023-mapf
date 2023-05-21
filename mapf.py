@@ -4,18 +4,29 @@ from typing import Dict, List, Set, Tuple
 from typing_extensions import override
 from graph import Graph
 
-def build_path(camefrom: List[int|None], origin:int, goal:int):
+def build_path(camefrom: List[int|None], origin:int, goal:int, reservations: Dict[int,Set[Tuple[int,int]]]):
     curr = goal
-    revresult = [goal]
+    revnodes = [goal]
     while curr != origin and curr != None:
         curr = camefrom[curr]
-        revresult.append(curr)
-        
+        revnodes.append(curr)
     if curr != origin: return None
-    return list(reversed(revresult))
+    
+    nodes = list(reversed(revnodes))
+    
+    t = 0
+    result = [origin]
+    for prev,pos in zip(nodes,nodes[1:]):
+        while (prev,pos) in reservations[t+1] or (pos,pos) in reservations[t+1]:
+            result.append(prev)
+            t += 1
+        result.append(pos)
+        t += 1
+    
+    return result
 
 def a_star_coop(graph: Graph, start: int, goal: int, 
-    reservations: Dict[int, Set[int]]) -> List[int] | None:
+    reservations: Dict[int, Set[Tuple[int,int]]]) -> List[int] | None:
     # cost map, preloaded with infinity
     g = [float("+inf") for _ in range(graph.size)]
     g[start] = 0
@@ -31,16 +42,25 @@ def a_star_coop(graph: Graph, start: int, goal: int,
         if node in closed_list:
             continue
         if node == goal:
-            return build_path(trace, start, goal)
+            return build_path(trace, start, goal, reservations)
         closed_list.add(node)
-        for adj,g_adj in graph.neighbours(node) + [(node, 0)]:
+        for adj,g_adj in graph.neighbours(node):
             # that tile can't be used or has been explored
             if adj in closed_list:
                 continue
             # that tile can't be used if it's reserved totally or from our location
-            if (adj,adj) in reservations[t+1] or (node,adj) in reservations[t+1]:
+            can_wait = True
+            wait_cost = 0
+            while (adj,adj) in reservations[t+1] or (node,adj) in reservations[t+1]:
+                # if we can't wait, stop this expansion
+                if (node, node) in reservations[t+1]:
+                    can_wait = False
+                    break
+                wait_cost += 1
+                t += 1 # attempt to wait
+            if not can_wait:
                 continue
-            g_new = g[node] + g_adj
+            g_new = g[node] + g_adj + wait_cost
             # we already found a lower-cost path to the neighbour
             if g_new >= g[adj]:
                 continue

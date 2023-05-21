@@ -108,7 +108,7 @@ if __name__ == "__main__":
     
     TILE_SIZE = min(DISPLAY_WIDTH // graph.dim_x, DISPLAY_HEIGHT // graph.dim_y)
     screen = pygame.display.set_mode((TILE_SIZE * graph.dim_x, TILE_SIZE * graph.dim_y))
-    font = pygame.font.SysFont(None, int(TILE_SIZE * 0.6))
+    font = pygame.font.SysFont(None, int(min(TILE_SIZE * 0.6, screen.get_width() * 0.025)))
     
     # graph.visualize(show_distances=False)
     
