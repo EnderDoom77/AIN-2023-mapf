@@ -86,10 +86,10 @@ def multi_agent_pathfinding_with_reservations(graph: Graph,
         plans.append(plan)
         if not plan:
             continue
-        for t in range(len(plan)-1):
+        for t in range(len(plan)):
             reservations[t].add((plan[t],plan[t]))
             if t > 0: # Reserve swaps
                 reservations[t].add((plan[t],plan[t-1]))
-        for t in range(len(plan)-1,graph.size):
+        for t in range(len(plan),graph.size):
             reservations[t].add((g,g))
     return plans, reservations
